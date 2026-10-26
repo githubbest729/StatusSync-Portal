@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>StatusSync — SCADA Project Status &amp; Client Communication Hub</title>
+<meta name="description" content="StatusSync Portal: SCADA project status broadcasts, RACI, deliverables and blocker escalation for Al Gurg Automation and Controls, Dubai.">
+<meta name="theme-color" content="#0B132B">
+<meta name="color-scheme" content="dark light">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./favicon.ico" sizes="any">
+<link rel="icon" type="image/svg+xml" href="./favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16x16.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="StatusSync">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<link rel="stylesheet" href="./css/styles.css">
+</head>
+<body data-persona="engineer">
+<a class="skip" href="#main">Skip to main content</a>
+
+<div id="titlebar" role="banner">
+  <div class="tb-brand"><span class="tb-logo" aria-hidden="true">SS</span><span class="tb-name">StatusSync</span><span class="tb-sub">Al Gurg Automation &amp; Controls · Dubai</span></div>
+  <div class="tb-right">
+    <span id="tbClock" class="pill" title="Dubai time (GST)">--:--</span>
+    <span id="netPill" class="pill ok" role="status">Online</span>
+    <span id="badgePill" class="pill" title="Unread open blockers (app badge)">0 open</span>
+  </div>
+</div>
+
+<div id="updateBanner" class="update-banner" role="status" hidden>
+  <span>New version available.</span>
+  <button type="button" id="updateBtn" class="btn small primary">Refresh</button>
+  <button type="button" id="updateDismiss" class="btn small ghost" aria-label="Dismiss update notice">Later</button>
+</div>
+
+<header class="cmdbar">
+  <div class="persona" role="group" aria-label="Viewing mode">
+    <button type="button" class="seg active" data-persona="engineer" aria-pressed="true">SCADA Engineer <small>PoC Command</small></button>
+    <button type="button" class="seg" data-persona="client" aria-pressed="false">Client / Stakeholder <small>Sign-Off Portal</small></button>
+  </div>
+  <div class="cmd-project">
+    <label for="projectSelect" class="sr">Project</label>
+    <select id="projectSelect" aria-label="Select project"></select>
+  </div>
+  <div class="cmd-actions">
+    <div class="mini-gauge" id="miniGauge" title="Storage usage" aria-live="polite">
+      <div class="mini-track"><span id="miniFill"></span></div>
+      <small id="miniText">Storage…</small>
+    </div>
+    <button type="button" id="installBtn" class="btn small primary" hidden>Install App</button>
+    <button type="button" id="themeBtn" class="btn small" aria-label="Toggle light or dark theme">Theme</button>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="Portal sections">
+  <button role="tab" id="tab-dashboard" aria-controls="panel-dashboard" aria-selected="true" data-tab="dashboard">1 · Status Hub</button>
+  <button role="tab" id="tab-broadcast" aria-controls="panel-broadcast" aria-selected="false" tabindex="-1" data-tab="broadcast">2 · Broadcasts</button>
+  <button role="tab" id="tab-raci" aria-controls="panel-raci" aria-selected="false" tabindex="-1" data-tab="raci">3 · RACI Matrix</button>
+  <button role="tab" id="tab-deliverables" aria-controls="panel-deliverables" aria-selected="false" tabindex="-1" data-tab="deliverables">4 · Deliverables &amp; QA</button>
+  <button role="tab" id="tab-blockers" aria-controls="panel-blockers" aria-selected="false" tabindex="-1" data-tab="blockers">5 · Blockers &amp; Cost</button>
+  <button role="tab" id="tab-vault" class="engineer-only" aria-controls="panel-vault" aria-selected="false" tabindex="-1" data-tab="vault">6 · Storage Vault</button>
+</nav>
+
+<main id="main" tabindex="-1">
+
+  <!-- TAB 1 -->
+  <section id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard">
+    <div class="section-head">
+      <div>
+        <h1 id="projTitle">Project</h1>
+        <p id="projMeta" class="muted"></p>
+      </div>
+      <div class="row-actions engineer-only">
+        <button type="button" class="btn" id="newProjectBtn">New project</button>
+        <button type="button" class="btn" id="editProjectBtn">Edit project</button>
+      </div>
+    </div>
+    <div id="kpiGrid" class="kpi-grid" aria-live="polite"></div>
+    <div class="card">
+      <h2>8-Stage SCADA Lifecycle Pipeline</h2>
+      <p class="muted client-hide">Drag a slider to update a stage. Stage status follows the percentage; overall completion is the average.</p>
+      <ol id="pipeline" class="pipeline"></ol>
+    </div>
+    <div class="card" id="telemetryCard">
+      <h2>Engineering Telemetry Snapshot</h2>
+      <div id="telemetryGrid" class="tele-grid"></div>
+      <div class="row-actions engineer-only"><button type="button" class="btn" id="editTelemetryBtn">Update telemetry counts</button></div>
+    </div>
+  </section>
+
+  <!-- TAB 2 -->
+  <section id="panel-broadcast" role="tabpanel" aria-labelledby="tab-broadcast" hidden>
+    <div class="section-head"><h1>Status Broadcast &amp; Transmittal</h1></div>
+    <div class="card engineer-only" id="composerCard">
+      <h2>Compose status update</h2>
+      <form id="composerForm" autocomplete="off">
+        <div class="grid-3">
+          <label>Update type
+            <select id="cmpType"><option>Weekly</option><option>Daily</option><option>Milestone</option><option>Urgent</option></select>
+          </label>
+          <label>Report reference
+            <input id="cmpRef" type="text" required>
+          </label>
+          <label>Document control no.
+            <input id="cmpDoc" type="text" readonly>
+          </label>
+        </div>
+        <fieldset class="chips">
+          <legend>Send to (by role)</legend>
+          <div id="cmpRoles"></div>
+        </fieldset>
+        <label>Executive summary<textarea id="cmpSummary" rows="3" required></textarea></label>
+        <div class="grid-2">
+          <label>Wonderware SCADA / HMI progress<textarea id="cmpScada" rows="3"></textarea></label>
+          <label>PLC &amp; OPC/Modbus communication status<textarea id="cmpPlc" rows="3"></textarea></label>
+          <label>SQL database &amp; Historian status<textarea id="cmpSql" rows="3"></textarea></label>
+          <label>Site survey / BOM / procurement<textarea id="cmpBom" rows="3"></textarea></label>
+        </div>
+        <label>QA &amp; QHSE notes (Annexure-SCT-HR-001)<textarea id="cmpQa" rows="2"></textarea></label>
+        <div class="row-actions wrap">
+          <button type="button" class="btn" id="autoFillBtn">Auto-fill engineering telemetry</button>
+          <button type="submit" class="btn primary" id="saveBroadcastBtn">Save to portal feed</button>
+          <button type="button" class="btn" id="copyWaBtn">Copy WhatsApp / Teams brief</button>
+          <button type="button" class="btn" id="shareBtn">Share…</button>
+          <button type="button" class="btn" id="printBtn">Printable / PDF transmittal</button>
+          <button type="button" class="btn" id="queueBtn">Queue offline (background sync)</button>
+        </div>
+        <p id="composerMsg" class="muted" role="status"></p>
+      </form>
+    </div>
+    <div class="card">
+      <h2>Broadcast history</h2>
+      <div class="filters">
+        <label class="sr" for="histSearch">Search broadcasts</label>
+        <input id="histSearch" type="search" placeholder="Search reference or summary…">
+        <label class="sr" for="histQuarter">Quarter</label>
+        <select id="histQuarter"><option value="">All quarters</option></select>
+        <label class="check"><input type="checkbox" id="histArchive"> Include cold archive</label>
+      </div>
+      <ul id="historyList" class="timeline"></ul>
+      <div class="row-actions"><button type="button" class="btn" id="histMore" hidden>Load older entries</button></div>
+    </div>
+  </section>
+
+  <!-- TAB 3 -->
+  <section id="panel-raci" role="tabpanel" aria-labelledby="tab-raci" hidden>
+    <div class="section-head">
+      <h1>Participant &amp; Stakeholder RACI Matrix</h1>
+      <div class="row-actions engineer-only">
+        <button type="button" class="btn" id="addParticipantBtn">Add participant</button>
+        <button type="button" class="btn" id="pickContactBtn">Pick from contacts</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="filters">
+        <label for="raciFilter" class="sr">Filter by RACI</label>
+        <select id="raciFilter">
+          <option value="">All RACI roles</option><option value="R">Responsible</option><option value="A">Accountable</option>
+          <option value="C">Consulted</option><option value="I">Informed</option>
+        </select>
+        <label for="raciRole" class="sr">Filter by role</label>
+        <select id="raciRole"><option value="">All roles</option></select>
+      </div>
+      <div class="table-wrap">
+        <table class="grid" id="raciTable">
+          <thead><tr><th>Name</th><th>Organisation</th><th>Role</th><th>RACI</th><th>Preferred channel</th><th>Last contacted</th><th>Days since status</th><th class="engineer-only">Actions</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Communication log</h2>
+      <ul id="commList" class="timeline"></ul>
+      <div class="row-actions"><button type="button" class="btn" id="commMore" hidden>Load older entries</button></div>
+    </div>
+  </section>
+
+  <!-- TAB 4 -->
+  <section id="panel-deliverables" role="tabpanel" aria-labelledby="tab-deliverables" hidden>
+    <div class="section-head">
+      <h1>SCADA Deliverables, BOM &amp; QA Tracker</h1>
+      <div class="row-actions">
+        <button type="button" class="btn engineer-only" id="addDeliverableBtn">Add deliverable</button>
+        <button type="button" class="btn" id="exportDeliverablesBtn">Export CSV</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="filters">
+        <label for="delCategory" class="sr">Category</label>
+        <select id="delCategory"><option value="">All categories</option></select>
+        <label for="delStatus" class="sr">Status</label>
+        <select id="delStatus"><option value="">All statuses</option><option>Not Started</option><option>In Progress</option><option>Blocked</option><option>Complete</option></select>
+      </div>
+      <div id="deliverableList"></div>
+    </div>
+  </section>
+
+  <!-- TAB 5 -->
+  <section id="panel-blockers" role="tabpanel" aria-labelledby="tab-blockers" hidden>
+    <div class="section-head">
+      <h1>PM Blocker, Working Hours &amp; Expenditure Board</h1>
+      <div class="row-actions engineer-only"><button type="button" class="btn primary" id="addBlockerBtn">Log blocker</button></div>
+    </div>
+    <div id="blockerKpis" class="kpi-grid small"></div>
+    <div id="blockerBoard" class="board"></div>
+  </section>
+
+  <!-- TAB 6 -->
+  <section id="panel-vault" role="tabpanel" aria-labelledby="tab-vault" hidden class="engineer-only">
+    <div class="section-head"><h1>3-Year Storage Vault, OPFS Files &amp; PWA Diagnostics</h1></div>
+    <div class="grid-2">
+      <div class="card">
+        <h2>Storage telemetry &amp; 3-year capacity</h2>
+        <div class="gauge" role="img" aria-label="Storage quota used"><div class="gauge-fill" id="gaugeFill"></div></div>
+        <dl id="storageStats" class="stats"></dl>
+        <div class="row-actions"><button type="button" class="btn" id="refreshStorageBtn">Refresh</button><button type="button" class="btn" id="persistBtn">Request persistent storage</button></div>
+      </div>
+      <div class="card">
+        <h2>Attachments (OPFS)</h2>
+        <p class="muted">Signed FAT/SAT sheets, architecture diagrams, MOM PDFs, site photos — stored on this device for the selected project.</p>
+        <label class="file-btn btn">Add files<input type="file" id="attachInput" multiple hidden></label>
+        <ul id="attachList" class="plain-list"></ul>
+      </div>
+      <div class="card">
+        <h2>Cold archive compactor</h2>
+        <p class="muted">Broadcasts and communication entries older than 6 months are compressed per quarter and stay searchable.</p>
+        <div class="row-actions wrap">
+          <button type="button" class="btn" id="compactPreviewBtn">Preview</button>
+          <button type="button" class="btn primary" id="compactBtn">Compact now</button>
+        </div>
+        <div class="filters"><input id="archSearch" type="search" placeholder="Search archived records…" aria-label="Search archived records"><button type="button" class="btn" id="archSearchBtn">Search</button></div>
+        <p id="compactMsg" class="muted" role="status"></p>
+        <ul id="archiveList" class="plain-list"></ul>
+      </div>
+      <div class="card">
+        <h2>Backup &amp; restore</h2>
+        <p class="muted">One-click full snapshot of every store (attachment files are listed, not embedded).</p>
+        <div class="row-actions wrap">
+          <button type="button" class="btn primary" id="exportBtn">Export snapshot (.json)</button>
+          <button type="button" class="btn" id="importBtn">Import snapshot…</button>
+          <input type="file" id="importInput" accept=".json,application/json" hidden>
+        </div>
+        <label class="check"><input type="checkbox" id="importReplace"> Replace existing data on import</label>
+        <p id="backupMsg" class="muted" role="status"></p>
+      </div>
+    </div>
+    <div class="card">
+      <h2>PWA capabilities status board</h2>
+      <div id="pwaBoard" class="tele-grid"></div>
+    </div>
+  </section>
+</main>
+
+<dialog id="formDialog" aria-labelledby="formTitle">
+  <form method="dialog" id="dialogForm">
+    <h2 id="formTitle"></h2>
+    <div id="formFields"></div>
+    <div class="row-actions end">
+      <button type="button" class="btn ghost" id="formCancel">Cancel</button>
+      <button type="submit" class="btn primary" id="formOk">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
+
+<script src="./js/db.js"></script>
+<script src="./js/reports.js"></script>
+<script src="./js/app.js"></script>
+</body>
+</html>

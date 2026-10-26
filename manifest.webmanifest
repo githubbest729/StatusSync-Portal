@@ -1,0 +1,65 @@
+{
+  "id": "/statussync-portal-pwa/",
+  "name": "StatusSync — SCADA Project Status & Client Communication Hub",
+  "short_name": "StatusSync",
+  "description": "Point-of-contact portal for SCADA engineers at Al Gurg Automation and Controls, Dubai: broadcast project status, track RACI, deliverables, blockers and 3 years of offline communication history.",
+  "start_url": "./index.html?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "theme_color": "#0B132B",
+  "background_color": "#0B132B",
+  "lang": "en-AE",
+  "dir": "ltr",
+  "categories": ["business", "productivity", "utilities"],
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "icons/icon-72.png", "sizes": "72x72", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-96.png", "sizes": "96x96", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-128.png", "sizes": "128x128", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-152.png", "sizes": "152x152", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-384.png", "sizes": "384x384", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    { "src": "screenshots/screenshot-wide-1280x720.png", "sizes": "1280x720", "type": "image/png", "form_factor": "wide", "label": "Executive Project Status Hub with 8-stage SCADA lifecycle pipeline" },
+    { "src": "screenshots/screenshot-narrow-720x1280.png", "sizes": "720x1280", "type": "image/png", "form_factor": "narrow", "label": "StatusSync dashboard on mobile" }
+  ],
+  "shortcuts": [
+    { "name": "New Status Broadcast", "short_name": "Broadcast", "description": "Compose a project status broadcast", "url": "./index.html?action=broadcast", "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96", "type": "image/png" }] },
+    { "name": "Log PM Blocker", "short_name": "Blocker", "description": "Log and escalate a blocker to the PM", "url": "./index.html?action=blocker", "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96", "type": "image/png" }] },
+    { "name": "Client Portal View", "short_name": "Client View", "description": "Open the read-only client sign-off portal", "url": "./index.html?action=client", "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96", "type": "image/png" }] },
+    { "name": "Export Status Report", "short_name": "Export", "description": "Generate a formal transmittal report", "url": "./index.html?action=export", "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96", "type": "image/png" }] }
+  ],
+  "share_target": {
+    "action": "./index.html?share-target=1",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        { "name": "files", "accept": ["image/*", "application/pdf", "text/csv", "application/json", "text/plain", ".docx", ".xlsx"] }
+      ]
+    }
+  },
+  "launch_handler": { "client_mode": "focus-existing" },
+  "protocol_handlers": [
+    { "protocol": "web+statussync", "url": "./index.html?protocol=%s" }
+  ],
+  "file_handlers": [
+    {
+      "action": "./index.html?source=file",
+      "accept": {
+        "application/json": [".json"],
+        "text/csv": [".csv"]
+      }
+    }
+  ]
+}
