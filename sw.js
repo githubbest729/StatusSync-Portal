@@ -1,8 +1,8 @@
 /* StatusSync Portal — Service Worker */
 'use strict';
 
-const CACHE_NAME = 'STATUSSYNC_CACHE_v2026.1';
-const RUNTIME_CACHE = 'STATUSSYNC_RUNTIME_v2026.1';
+const CACHE_NAME = 'STATUSSYNC_CACHE_v2026.2';
+const RUNTIME_CACHE = 'STATUSSYNC_RUNTIME_v2026.2';
 const OFFLINE_URL = './offline.html';
 
 const APP_SHELL = [

@@ -5,7 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>StatusSync — SCADA Project Status &amp; Client Communication Hub</title>
 <meta name="description" content="StatusSync Portal: SCADA project status broadcasts, RACI, deliverables and blocker escalation for Al Gurg Automation and Controls, Dubai.">
-<meta name="theme-color" content="#0B132B">
+<meta name="theme-color" content="#0B132B" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F8FAFC" media="(prefers-color-scheme: light)">
+<script>
+/* Apply saved or system theme before first paint (no flash, no layout shift). */
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('ss_theme'); } catch (e) {}
+  if (t !== 'light' && t !== 'dark') t = window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  var c = t === 'light' ? '#F8FAFC' : '#0B132B';
+  document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) { m.setAttribute('content', c); });
+})();
+</script>
 <meta name="color-scheme" content="dark light">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./favicon.ico" sizes="any">
@@ -27,7 +39,7 @@
   <div class="tb-right">
     <span id="tbClock" class="pill" title="Dubai time (GST)">--:--</span>
     <span id="netPill" class="pill ok" role="status">Online</span>
-    <span id="badgePill" class="pill" title="Unread open blockers (app badge)">0 open</span>
+    <button type="button" id="badgePill" class="pill" aria-live="polite" title="Open blockers: this project (portfolio total). Click to view the Blockers board.">0 Open</button>
   </div>
 </div>
 
@@ -52,9 +64,15 @@
       <small id="miniText">Storage…</small>
     </div>
     <button type="button" id="installBtn" class="btn small primary" hidden>Install App</button>
-    <button type="button" id="themeBtn" class="btn small" aria-label="Toggle light or dark theme">Theme</button>
+    <button type="button" id="themeBtn" class="btn small" aria-label="Change theme: auto, light or dark">Theme: Auto</button>
   </div>
 </header>
+
+<div id="modeBar" class="mode-bar" role="region" aria-label="Viewing mode" hidden>
+  <p><strong>Client &amp; Stakeholder Sign-Off View (read-only telemetry).</strong> You can acknowledge broadcasts, sign off deliverables and export transmittals. Switch to SCADA Engineer Command Mode to edit progress, compose broadcasts or manage blockers.</p>
+  <button type="button" class="btn small primary" id="modeSwitchBtn">Switch to Engineer Mode</button>
+  <button type="button" class="btn small ghost" id="modeDismissBtn" aria-label="Dismiss this notice">Dismiss</button>
+</div>
 
 <nav class="tabs" role="tablist" aria-label="Portal sections">
   <button role="tab" id="tab-dashboard" aria-controls="panel-dashboard" aria-selected="true" data-tab="dashboard">1 · Status Hub</button>
@@ -65,7 +83,17 @@
   <button role="tab" id="tab-vault" class="engineer-only" aria-controls="panel-vault" aria-selected="false" tabindex="-1" data-tab="vault">6 · Storage Vault</button>
 </nav>
 
+<details class="guide" id="guide" open>
+  <summary>Quick guide · how StatusSync works</summary>
+  <ol>
+    <li><b>Update SCADA telemetry</b>Drag the lifecycle sliders in the Status Hub and refresh HMI, I/O, OPC/Modbus and SQL counts.</li>
+    <li><b>Compose &amp; dispatch</b>In Broadcasts, auto-fill telemetry, review it, then save, share, print or queue offline.</li>
+    <li><b>Track sign-off &amp; blockers</b>Watch acknowledgments, client sign-offs and escalate blockers to the PM with hours and AED impact.</li>
+  </ol>
+</details>
+
 <main id="main" tabindex="-1">
+<div class="skel" id="skel" aria-hidden="true"><div></div><div></div><div></div></div>
 
   <!-- TAB 1 -->
   <section id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard">
@@ -266,6 +294,33 @@
   </form>
 </dialog>
 
+<dialog id="installDialog" aria-labelledby="installTitle">
+  <h2 id="installTitle">Install StatusSync Portal</h2>
+  <p class="muted">Install for a home-screen icon, a full-screen app window and offline access to your projects.</p>
+  <ul class="install-steps">
+    <li data-platform="ios">
+      <h3>iPhone / iPad (Safari)</h3>
+      <p><b>1.</b> Tap the <b>Share</b> button <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg> in the Safari toolbar.</p>
+      <p><b>2.</b> Scroll down and tap <b>Add to Home Screen</b>.</p>
+      <p><b>3.</b> Tap <b>Add</b>. StatusSync appears on your Home Screen and opens full-screen.</p>
+    </li>
+    <li data-platform="desktop">
+      <h3>Desktop (Chrome / Edge)</h3>
+      <p><b>1.</b> Click the <b>Install</b> icon <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 8v5M9.5 10.5L12 13l2.5-2.5M8 20h8"/></svg> at the right end of the address bar.</p>
+      <p><b>2.</b> No icon? Open the browser menu (<b>⋮</b>) and choose <b>Install StatusSync…</b></p>
+      <p><b>3.</b> Confirm <b>Install</b>, then pin the app to your taskbar or Dock.</p>
+    </li>
+    <li data-platform="android">
+      <h3>Android (Chrome)</h3>
+      <p><b>1.</b> Open the Chrome menu <b>⋮</b>.</p>
+      <p><b>2.</b> Tap <b>Install app</b> (or <b>Add to Home screen</b>).</p>
+      <p><b>3.</b> Confirm. The app opens without browser bars and works offline.</p>
+    </li>
+  </ul>
+  <form method="dialog" class="row-actions end"><button type="submit" class="btn primary">Got it</button></form>
+</dialog>
+
+<div id="liveRegion" class="sr" role="status" aria-live="polite" aria-atomic="true"></div>
 <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
 
 <script src="./js/db.js"></script>

@@ -62,6 +62,54 @@
     host.appendChild(t);
     setTimeout(() => t.remove(), o.ms || 5000);
   }
+  /* ---------------- helpers: announce, loading skeleton, empty states, status mapping ---------------- */
+  function announce(msg) {
+    const r = $('#liveRegion');
+    if (!r) return;
+    r.textContent = '';
+    setTimeout(() => { r.textContent = msg; }, 40);
+  }
+  let loadTimer = null;
+  function setLoading(on, autoMs) {
+    const m = $('#main');
+    if (!m) return;
+    clearTimeout(loadTimer);
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (on && !reduce) {
+      m.dataset.loading = '1';
+      if (autoMs) loadTimer = setTimeout(() => { delete m.dataset.loading; }, autoMs);
+    } else {
+      delete m.dataset.loading;
+    }
+  }
+  const SVG_ATTR = ' viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
+  const EMPTY_SVG = {
+    search: '<svg' + SVG_ATTR + '><circle cx="28" cy="28" r="14"/><path d="M38.5 38.5L52 52"/><path d="M22 28h12" opacity=".6"/></svg>',
+    inbox: '<svg' + SVG_ATTR + '><path d="M10 34l8-18h28l8 18v14a4 4 0 0 1-4 4H14a4 4 0 0 1-4-4z"/><path d="M10 34h14a8 8 0 0 0 16 0h14"/></svg>',
+    shield: '<svg' + SVG_ATTR + '><path d="M32 8l20 8v14c0 14-9 22-20 26C21 52 12 44 12 30V16z"/><path d="M22 32l8 8 13-14"/></svg>'
+  };
+  function emptyState(o) {
+    return '<div class="empty" role="status">' + (EMPTY_SVG[o.icon] || EMPTY_SVG.inbox) + '<b>' + esc(o.title) + '</b><p>' + esc(o.text) + '</p>' +
+      (o.btn ? '<button type="button" class="btn small primary' + (o.engineer ? ' engineer-only' : '') + '" data-empty-act="' + o.act + '">' + esc(o.btn) + '</button>' : '') + '</div>';
+  }
+  const emptyLi = (o) => '<li style="border:0;background:none;padding:0">' + emptyState(o) + '</li>';
+
+  const STATE_FILL = { 'st-complete': 'var(--c-complete)', 'st-progress': 'var(--c-progress)', 'st-delayed': 'var(--c-delayed)', 'st-pending': 'var(--c-pending)' };
+  function stageStatus(v, p, i, firstActive) {
+    if (v >= 100) return { cls: 'st-complete', label: 'Complete' };
+    if (v > 10) {
+      if (p.ragStatus === 'Red' && i === firstActive) return { cls: 'st-delayed', label: 'Delayed' };
+      return { cls: 'st-progress', label: 'In Progress' };
+    }
+    return { cls: 'st-pending', label: 'Scheduled' };
+  }
+  function meterHTML(v, label, cls) {
+    return '<div class="meter ' + cls + '" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + v + '" aria-label="' + esc(label) + '" style="--progress:' + v + '%;--fill:' + STATE_FILL[cls] + '"></div>';
+  }
+  function rangeHTML(v, label, cls, id, extra) {
+    return '<input type="range" class="track ' + cls + (extra ? ' ' + extra : '') + '"' + (id ? ' id="' + id + '"' : '') + ' min="0" max="100" step="1" value="' + v + '" aria-label="' + esc(label) + '" style="--progress:' + v + '%;--fill:' + STATE_FILL[cls] + '">';
+  }
+
   async function copyText(text) {
     try { await navigator.clipboard.writeText(text); return true; } catch (e) {
       const ta = document.createElement('textarea');
@@ -183,17 +231,16 @@
     const i = state.projects.findIndex((x) => x.id === p.id);
     if (i >= 0) state.projects[i] = p; else state.projects.push(p);
   }
-  async function openBlockerCountAll() {
-    const all = await SSDB.getAll('blockers_issues');
-    return all.filter((b) => b.status !== 'Resolved').length;
-  }
   async function updateBadge() {
-    let n = 0;
-    try { n = await openBlockerCountAll(); } catch (e) { n = 0; }
-    $('#badgePill').textContent = n + ' open';
-    $('#badgePill').className = 'pill' + (n ? ' warn' : ' ok');
+    let open = [];
+    try { open = (await SSDB.getAll('blockers_issues')).filter((b) => b.status !== 'Resolved'); } catch (e) { open = []; }
+    const mine = open.filter((b) => b.projectId === state.projectId).length;
+    const pill = $('#badgePill');
+    pill.innerHTML = mine + ' Open (' + open.length + '<span class="pf">&nbsp;Portfolio</span>)';
+    pill.className = 'pill' + (mine ? ' warn' : ' ok');
+    pill.setAttribute('aria-label', mine + ' open blockers on this project, ' + open.length + ' across the portfolio. Open the Blockers board.');
     try {
-      if (navigator.setAppBadge) { if (n > 0) await navigator.setAppBadge(n); else await navigator.clearAppBadge(); }
+      if (navigator.setAppBadge) { if (open.length > 0) await navigator.setAppBadge(open.length); else await navigator.clearAppBadge(); }
     } catch (e) { /* ignore */ }
   }
 
@@ -206,6 +253,9 @@
       b.classList.toggle('active', on);
       b.setAttribute('aria-pressed', String(on));
     });
+    const mb = $('#modeBar');
+    if (mb) mb.hidden = p !== 'client';
+    announce(p === 'client' ? 'Client and stakeholder view. Read-only telemetry.' : 'SCADA Engineer command mode.');
     if (p === 'client' && activeTab() === 'vault') showTab('dashboard');
     renderAll();
   }
@@ -218,13 +268,22 @@
       if (on && focus) t.focus();
     });
     $$('main > section').forEach((s) => { s.hidden = s.id !== 'panel-' + name; });
+    setLoading(true, 140);
     if (name === 'vault') safe(renderVault, 'Storage vault');
   }
-  function applyTheme(t) {
+  function effectiveTheme(pref) {
+    if (pref === 'light' || pref === 'dark') return pref;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  }
+  function applyTheme(pref) {
+    if (['auto', 'light', 'dark'].indexOf(pref) === -1) pref = 'auto';
+    const t = effectiveTheme(pref);
     document.documentElement.dataset.theme = t;
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', t === 'light' ? '#EEF2FA' : '#0B132B');
-    lsSet('ss_theme', t);
+    document.documentElement.dataset.themePref = pref;
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', t === 'light' ? '#F8FAFC' : '#0B132B'));
+    const btn = $('#themeBtn');
+    if (btn) btn.textContent = 'Theme: ' + (pref === 'auto' ? 'Auto' : pref === 'light' ? 'Light' : 'Dark');
+    lsSet('ss_theme', pref);
   }
 
   /* ---------------- dashboard ---------------- */
@@ -255,7 +314,7 @@
       ' · Target ' + fmtDate(p.targetDate) + ' · RAG <b class="rag-' + esc(p.ragStatus) + '">' + esc(p.ragStatus) + '</b>';
     const qOk = p.qhseStatus === 'Verified';
     $('#kpiGrid').innerHTML =
-      kpi('Overall completion', p.overallProgress + '%', '<div class="bar"><span style="width:' + p.overallProgress + '%"></span></div>RAG ' + esc(p.ragStatus), p.ragStatus === 'Green' ? 'ok' : p.ragStatus === 'Amber' ? 'warn' : 'bad') +
+      kpi('Overall completion', p.overallProgress + '%', meterHTML(p.overallProgress, 'Overall completion', p.ragStatus === 'Green' ? 'st-complete' : 'st-delayed') + 'RAG ' + esc(p.ragStatus), p.ragStatus === 'Green' ? 'ok' : p.ragStatus === 'Amber' ? 'warn' : 'bad') +
       kpi('Wonderware / PLC health', health + '%', 'HMI ' + pctOf(t.hmiDone, t.hmiTotal) + '% · I/O ' + pctOf(t.tagsTested, t.tagsTotal) + '% · Links ' + (t.opcHealthy || 0) + '/' + (t.opcTotal || 0), health >= 80 ? 'ok' : health >= 55 ? 'warn' : 'bad') +
       kpi('Open blockers', open.length, hours + ' h · AED ' + aed.toLocaleString('en-US') + ' impact', open.some((b) => b.severity === 'Critical') ? 'bad' : open.length ? 'warn' : 'ok') +
       kpi('Acknowledgment rate', ackRate + '%', 'Last ' + bcPage.items.length + ' broadcasts', ackRate >= 75 ? 'ok' : 'warn') +
@@ -263,13 +322,12 @@
 
     const ro = state.persona === 'client';
     const names = SSDB.STAGES;
+    const firstActive = p.stages.findIndex((v) => v > 10 && v < 100);
     $('#pipeline').innerHTML = p.stages.map((v, i) => {
-      const st = v >= 100 ? ['Complete', 'ok'] : v > 0 ? ['In Progress', 'warn'] : ['Not Started', ''];
-      return '<li class="stage" data-i="' + i + '"><header><span class="num">' + (i + 1) + '</span><span>' + esc(names[i]) + '</span><span class="badge st ' + st[1] + '">' + st[0] + '</span></header>' +
-        '<div class="bar"><span style="width:' + v + '%"></span></div>' +
-        '<label class="sr" for="stage-' + i + '">' + esc(names[i]) + ' progress</label>' +
-        '<input type="range" id="stage-' + i + '" min="0" max="100" step="1" value="' + v + '"' + (ro ? ' disabled' : '') + '>' +
-        '<div class="row-actions"><b class="val">' + v + '%</b>' +
+      const st = stageStatus(v, p, i, firstActive);
+      return '<li class="stage ' + st.cls + '" data-i="' + i + '"><header><span class="num">' + (i + 1) + '</span><span>' + esc(names[i]) + '</span><span class="badge">' + st.label + '</span></header>' +
+        (ro ? meterHTML(v, names[i] + ' progress', st.cls) : rangeHTML(v, names[i] + ' progress', st.cls, 'stage-' + i)) +
+        '<div class="stage-foot"><b class="val">' + v + '%</b>' +
         (ro ? '' : '<button type="button" class="btn small" data-act="complete">Mark complete</button><button type="button" class="btn small ghost" data-act="reset">Reset</button>') +
         '</div></li>';
     }).join('');
@@ -479,12 +537,21 @@
   function broadcastItemHTML(b) {
     const recips = state.participants.filter((x) => (b.sentToRoles || []).indexOf(x.role) !== -1);
     const acked = (b.acknowledgments || []).map((a) => a.participantId);
+    const confirmed = recips.filter((r) => acked.indexOf(r.id) !== -1).length;
+    const cells = [
+      ['HMI', 'SCADA / HMI', b.scadaProgress, '#7DB1FF'],
+      ['I/O', 'PLC / Comms', b.plcCommStatus, '#00F5D4'],
+      ['SQL', 'SQL / Historian', b.sqlDbStatus, '#A78BFA'],
+      ['BOM', 'Site / BOM', b.siteSurveyBomStatus, '#F59E0B'],
+      ['QA', 'QA / QHSE', b.qaQhseNotes, '#10B981']
+    ];
     return '<li data-id="' + esc(b.id) + '"><div class="ttl"><span>' + esc(b.reportRef) + '</span><span class="badge ' + (b.periodType === 'Urgent' ? 'bad' : '') + '">' + esc(b.periodType) + '</span><span class="ts">' + fmtDateTime(b.timestamp) + '</span></div>' +
       '<p>' + esc(b.executiveSummary) + '</p>' +
-      '<p class="muted"><b>SCADA/HMI:</b> ' + esc(b.scadaProgress) + '<br><b>PLC/Comms:</b> ' + esc(b.plcCommStatus) + '<br><b>SQL:</b> ' + esc(b.sqlDbStatus) + '<br><b>Site/BOM:</b> ' + esc(b.siteSurveyBomStatus) + '<br><b>QA/QHSE:</b> ' + esc(b.qaQhseNotes) + '</p>' +
-      '<div class="acks" role="group" aria-label="Acknowledgments for ' + esc(b.reportRef) + '">' + (recips.length ? recips.map((r) =>
+      '<div class="bento">' + cells.map((c) => '<div class="cell" style="--cc:' + c[3] + '"><b><i>' + c[0] + '</i>' + c[1] + '</b><span>' + esc(c[2] || '—') + '</span></div>').join('') + '</div>' +
+      '<div class="signoff" role="group" aria-label="Acknowledgments for ' + esc(b.reportRef) + '"><div class="sh"><span>Stakeholder Sign-Off &amp; Acknowledgment</span><span class="so-count">(' + confirmed + '/' + recips.length + ' Confirmed)</span></div>' +
+      (recips.length ? recips.map((r) =>
         '<label class="check"><input type="checkbox" class="ack" data-pid="' + esc(r.id) + '"' + (acked.indexOf(r.id) !== -1 ? ' checked' : '') + '> ' + esc(r.name) + '</label>').join('') : '<span class="muted">No recipients matched.</span>') + '</div>' +
-      '<div class="row-actions wrap"><button type="button" class="btn small" data-act="print">Transmittal / PDF</button><button type="button" class="btn small" data-act="wa">Copy brief</button></div></li>';
+      '<div class="row-actions"><button type="button" class="btn small" data-act="print">Transmittal / PDF</button><button type="button" class="btn small" data-act="wa">Copy brief</button></div></li>';
   }
 
   async function renderHistory(reset) {
@@ -497,7 +564,12 @@
     const { items, nextBefore } = await SSDB.pageByProject('status_broadcasts', p.id, { limit: 15, before: state.histBefore, filter });
     state.histBefore = nextBefore;
     list.insertAdjacentHTML('beforeend', items.map(broadcastItemHTML).join(''));
-    if (reset && !items.length) list.innerHTML = '<li class="muted">No broadcasts match.</li>';
+    if (reset && !items.length && !$('#histArchive').checked) {
+      const filtered = !!(q || qt);
+      list.innerHTML = emptyLi({ icon: filtered ? 'search' : 'inbox', title: filtered ? 'No broadcasts match' : 'No broadcasts yet',
+        text: filtered ? 'Nothing matches the current search or quarter.' : 'Compose your first status broadcast to start the project history.',
+        btn: filtered ? 'Reset filters' : 'Compose broadcast', act: filtered ? 'reset-hist' : 'compose', engineer: !filtered });
+    }
     $('#histMore').hidden = !nextBefore;
     if (reset && $('#histArchive').checked) {
       let hits = await SSDB.searchArchives(q, p.id);
@@ -551,7 +623,9 @@
         '<button type="button" class="btn small" data-act="log">Log comms</button>' +
         (wa ? '<a class="btn small" target="_blank" rel="noopener" href="https://wa.me/' + wa + '">WhatsApp</a>' : '') +
         '<button type="button" class="btn small" data-act="edit">Edit</button><button type="button" class="btn small danger" data-act="del">Remove</button></div></td></tr>';
-    }).join('') || '<tr><td colspan="8" class="muted">No participants match.</td></tr>';
+    }).join('') || '<tr><td colspan="8">' + emptyState({ icon: 'search', title: (rf || ro) ? 'No participants match' : 'No participants yet',
+      text: (rf || ro) ? 'No one on this project has that RACI letter and role together.' : 'Add the client, consultant, PM and internal team to track who needs status updates.',
+      btn: (rf || ro) ? 'Reset filters' : 'Add participant', act: (rf || ro) ? 'reset-raci' : 'add-participant', engineer: !(rf || ro) }) + '</td></tr>';
   }
 
   async function editParticipant(existing, prefill) {
@@ -616,7 +690,7 @@
         (e.body ? '<p>' + esc(e.body) + '</p>' : '') +
         ((e.attachmentsMeta || []).length ? '<p class="muted">Attachments: ' + e.attachmentsMeta.map((a) => esc(a.name)).join(', ') + '</p>' : '') + '</li>';
     }).join(''));
-    if (reset && !items.length) list.innerHTML = '<li class="muted">No communication logged yet.</li>';
+    if (reset && !items.length) list.innerHTML = emptyLi({ icon: 'inbox', title: 'No communication logged yet', text: 'RFIs, MOMs, clarifications and broadcasts will appear here.' });
     $('#commMore').hidden = !nextBefore;
   }
 
@@ -630,14 +704,21 @@
     const ro = state.persona === 'client';
     const groups = {};
     all.forEach((d) => { (groups[d.category] = groups[d.category] || []).push(d); });
+    const STC = { 'Complete': ['st-complete', 'ok'], 'In Progress': ['st-progress', 'info'], 'Blocked': ['st-delayed', 'warn'], 'Not Started': ['st-pending', ''] };
     const html = CATEGORIES.filter((c) => groups[c]).map((c) =>
-      '<div class="del-group"><h3>' + esc(c) + '</h3>' + groups[c].map((d) =>
-        '<div class="del-row" data-id="' + esc(d.id) + '"><div class="t"><b>' + esc(d.title) + '</b><span>Owner ' + esc(d.owner) + ' · Due ' + fmtDate(d.dueDate) + '</span></div>' +
-        '<select class="d-status" aria-label="Status for ' + esc(d.title) + '"' + (ro ? ' disabled' : '') + '>' + STATUSES.map((s) => '<option' + (s === d.status ? ' selected' : '') + '>' + s + '</option>').join('') + '</select>' +
-        '<div><input type="range" class="d-prog" min="0" max="100" value="' + d.progress + '" aria-label="Progress for ' + esc(d.title) + '"' + (ro ? ' disabled' : '') + '><div class="muted"><b class="d-val">' + d.progress + '%</b></div></div>' +
-        '<label class="check" style="margin:0"><input type="checkbox" class="d-sign"' + (d.clientSignOff ? ' checked' : '') + '> Sign-off</label>' +
-        '<div class="row-actions engineer-only"><button type="button" class="btn small" data-act="edit">Edit</button><button type="button" class="btn small danger" data-act="del">Delete</button></div></div>').join('') + '</div>').join('');
-    $('#deliverableList').innerHTML = html || '<p class="muted">No deliverables match.</p>';
+      '<div class="del-group"><h3>' + esc(c) + '</h3>' + groups[c].map((d) => {
+        const sc = STC[d.status] || STC['Not Started'];
+        return '<div class="del-row ' + sc[0] + '" data-id="' + esc(d.id) + '"><div class="t"><b>' + esc(d.title) + '</b><span>Owner ' + esc(d.owner) + ' · Due ' + fmtDate(d.dueDate) + '</span></div>' +
+          (ro ? '<span class="badge ' + sc[1] + '">' + esc(d.status) + '</span>'
+            : '<select class="d-status" aria-label="Status for ' + esc(d.title) + '">' + STATUSES.map((s) => '<option' + (s === d.status ? ' selected' : '') + '>' + s + '</option>').join('') + '</select>') +
+          '<div class="pv">' + (ro ? meterHTML(d.progress, d.title + ' progress', sc[0]) : rangeHTML(d.progress, d.title + ' progress', sc[0], null, 'd-prog')) + '<b class="val d-val">' + d.progress + '%</b></div>' +
+          '<label class="check"><input type="checkbox" class="d-sign"' + (d.clientSignOff ? ' checked' : '') + '> Client sign-off</label>' +
+          '<div class="row-actions engineer-only"><button type="button" class="btn small" data-act="edit">Edit</button><button type="button" class="btn small danger" data-act="del">Delete</button></div></div>';
+      }).join('') + '</div>').join('');
+    const filtered = !!(cf || sf);
+    $('#deliverableList').innerHTML = html || emptyState({ icon: 'search', title: filtered ? 'No deliverables match' : 'No deliverables yet',
+      text: filtered ? 'No checklist item fits this category and status.' : 'Add Wonderware, HMI, comms, SQL, BOM, FAT/SAT and training items to track.',
+      btn: filtered ? 'Reset filters' : 'Add deliverable', act: filtered ? 'reset-del' : 'add-deliverable', engineer: !filtered });
   }
   async function updateDeliverable(id, patch) {
     const d = await SSDB.get('deliverables_milestones', id);
@@ -696,20 +777,25 @@
       kpi('Working-hours impact', hrs + ' h', 'Open items only', hrs > 80 ? 'bad' : hrs ? 'warn' : 'ok') +
       kpi('Expenditure variance', 'AED ' + aed.toLocaleString('en-US'), 'Open exposure', aed > 30000 ? 'bad' : aed ? 'warn' : 'ok') +
       kpi('Absorbed (resolved)', 'AED ' + resolvedAed.toLocaleString('en-US'), 'Closed items', 'ok');
-    const cols = [['Open', 'Open'], ['Escalated to PM', 'Escalated to PM'], ['Resolved', 'Resolved']];
+    const cols = ['Open', 'Escalated to PM', 'Resolved'];
     const sevOrder = { Critical: 0, High: 1, Medium: 2, Low: 3 };
-    $('#blockerBoard').innerHTML = cols.map(([st, label]) => {
+    const emptyCol = {
+      'Open': { icon: 'shield', title: 'No open blockers', text: 'Nothing is waiting on the team right now.', btn: 'Log blocker', act: 'add-blocker', engineer: true },
+      'Escalated to PM': { icon: 'inbox', title: 'No escalations', text: 'Escalate a blocker to the PM when it threatens the critical path.' },
+      'Resolved': { icon: 'inbox', title: 'Nothing resolved yet', text: 'Closed blockers and the cost they absorbed appear here.' }
+    };
+    const card = (b) => '<div class="bcard sev-' + esc(b.severity) + '" data-id="' + esc(b.id) + '"><h3>' + esc(b.title) + '</h3>' +
+      '<div class="meta"><span class="badge ' + (b.severity === 'Critical' ? 'bad' : b.severity === 'High' ? 'warn' : '') + '">' + esc(b.severity) + '</span> ' + esc(b.subsystem) + ' · Owner ' + esc(b.assignedTo) + '</div>' +
+      '<div class="meta">Raised ' + fmtDate(b.raisedDate) + ' · Target ' + fmtDate(b.targetResolutionDate) + '</div>' +
+      '<div class="meta"><b>' + (+b.impactHours || 0) + ' h</b> · <b>AED ' + (+b.expenditureImpactAED || 0).toLocaleString('en-US') + '</b></div>' +
+      (b.resolutionNotes ? '<p style="margin:6px 0 0;font-size:.85rem">' + esc(b.resolutionNotes).replace(/\n/g, '<br>') + '</p>' : '') +
+      (ro ? '' : '<div class="row-actions">' +
+        (b.status === 'Open' ? '<button type="button" class="btn small primary" data-act="escalate">Escalate to PM →</button>' : '') +
+        (b.status !== 'Resolved' ? '<button type="button" class="btn small" data-act="resolve">Mark Resolved ✓</button>' : '<button type="button" class="btn small" data-act="reopen">Reopen</button>') +
+        '<button type="button" class="btn small" data-act="note">Log mitigation</button><button type="button" class="btn small" data-act="edit">Edit</button><button type="button" class="btn small danger" data-act="del">Delete</button></div>') + '</div>';
+    $('#blockerBoard').innerHTML = cols.map((st) => {
       const items = all.filter((b) => b.status === st).sort((a, b) => sevOrder[a.severity] - sevOrder[b.severity]);
-      return '<div class="col" data-status="' + st + '"><h2>' + label + ' <span class="badge">' + items.length + '</span></h2>' + (items.map((b) =>
-        '<div class="bcard sev-' + esc(b.severity) + '" data-id="' + esc(b.id) + '"><h3>' + esc(b.title) + '</h3>' +
-        '<div class="meta"><span class="badge ' + (b.severity === 'Critical' ? 'bad' : b.severity === 'High' ? 'warn' : '') + '">' + esc(b.severity) + '</span> ' + esc(b.subsystem) + ' · Owner ' + esc(b.assignedTo) + '</div>' +
-        '<div class="meta">Raised ' + fmtDate(b.raisedDate) + ' · Target ' + fmtDate(b.targetResolutionDate) + '</div>' +
-        '<div class="meta"><b>' + (+b.impactHours || 0) + ' h</b> · <b>AED ' + (+b.expenditureImpactAED || 0).toLocaleString('en-US') + '</b></div>' +
-        (b.resolutionNotes ? '<p style="margin:6px 0 0;font-size:.85rem">' + esc(b.resolutionNotes).replace(/\n/g, '<br>') + '</p>' : '') +
-        (ro ? '' : '<div class="row-actions wrap">' +
-          (st === 'Open' ? '<button type="button" class="btn small" data-act="escalate">Escalate to PM</button>' : '') +
-          (st !== 'Resolved' ? '<button type="button" class="btn small" data-act="resolve">Resolve</button>' : '<button type="button" class="btn small" data-act="reopen">Reopen</button>') +
-          '<button type="button" class="btn small" data-act="note">Log mitigation</button><button type="button" class="btn small" data-act="edit">Edit</button><button type="button" class="btn small danger" data-act="del">Delete</button></div>') + '</div>').join('') || '<p class="muted">Nothing here.</p>') + '</div>';
+      return '<div class="col" data-status="' + st + '"><h2>' + st + ' <span class="badge">' + items.length + '</span></h2>' + (items.map(card).join('') || emptyState(emptyCol[st])) + '</div>';
     }).join('');
   }
   async function editBlocker(existing) {
@@ -899,12 +985,20 @@
     $('#projectSelect').value = state.projectId;
   }
   async function selectProject(id) {
-    if (id) state.projectId = id;
-    lsSet('ss_project', state.projectId);
-    $('#projectSelect').value = state.projectId;
-    await loadParticipants();
-    await resetComposer();
-    await renderAll();
+    setLoading(true);
+    const t0 = Date.now();
+    try {
+      if (id) state.projectId = id;
+      lsSet('ss_project', state.projectId);
+      $('#projectSelect').value = state.projectId;
+      await loadParticipants();
+      await resetComposer();
+      await renderAll();
+      const p = curProject();
+      if (p) announce('Showing ' + p.projectCode + ', ' + p.name);
+    } finally {
+      setTimeout(() => setLoading(false), Math.max(0, 220 - (Date.now() - t0)));
+    }
   }
   async function renderAll() {
     await safe(async () => {
@@ -1029,22 +1123,59 @@
     } catch (e) { console.warn('SW registration failed', e); }
   }
 
+  function isStandalone() {
+    try {
+      return window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: window-controls-overlay)').matches || navigator.standalone === true;
+    } catch (e) { return false; }
+  }
+  function detectPlatform() {
+    const ua = navigator.userAgent || '';
+    if (/iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'ios';
+    if (/android/i.test(ua)) return 'android';
+    return 'desktop';
+  }
+  function openInstallGuide() {
+    const d = $('#installDialog');
+    if (!d) return;
+    const cur = detectPlatform();
+    $$('#installDialog [data-platform]').forEach((li) => li.classList.toggle('current', li.dataset.platform === cur));
+    d.showModal();
+  }
   function bindInstall() {
-    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); state.deferredInstall = e; $('#installBtn').hidden = false; });
-    window.addEventListener('appinstalled', () => { state.deferredInstall = null; $('#installBtn').hidden = true; toast('StatusSync installed'); });
-    $('#installBtn').addEventListener('click', promptInstall);
-    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !navigator.standalone;
-    if (ios && !lsGet('ss_ios_hint', '')) {
-      setTimeout(() => { toast('To install: tap Share, then "Add to Home Screen".', { ms: 9000 }); lsSet('ss_ios_hint', '1'); }, 4000);
+    const btn = $('#installBtn');
+    btn.hidden = isStandalone();
+    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); state.deferredInstall = e; });
+    window.addEventListener('appinstalled', () => { state.deferredInstall = null; btn.hidden = true; toast('StatusSync installed'); });
+    btn.addEventListener('click', promptInstall);
+    if (detectPlatform() === 'ios' && !isStandalone() && !lsGet('ss_ios_hint', '')) {
+      setTimeout(() => {
+        toast('Install on iPhone or iPad: tap Share, then Add to Home Screen.', { ms: 10000, action: { label: 'Show steps', fn: openInstallGuide } });
+        lsSet('ss_ios_hint', '1');
+      }, 4000);
     }
   }
   async function promptInstall() {
     const e = state.deferredInstall;
-    if (!e) return;
+    if (!e) { openInstallGuide(); return; }
     e.prompt();
     try { await e.userChoice; } catch (err) { /* ignore */ }
-    state.deferredInstall = null; $('#installBtn').hidden = true;
+    state.deferredInstall = null;
   }
+  function onEmptyAction(e) {
+    const b = e.target.closest('[data-empty-act]');
+    if (!b) return;
+    const a = b.dataset.emptyAct;
+    safe(async () => {
+      if (a === 'reset-hist') { $('#histSearch').value = ''; $('#histQuarter').value = ''; $('#histArchive').checked = false; await renderHistory(true); }
+      else if (a === 'reset-raci') { $('#raciFilter').value = ''; $('#raciRole').value = ''; await renderRaci(); }
+      else if (a === 'reset-del') { $('#delCategory').value = ''; $('#delStatus').value = ''; await renderDeliverables(); }
+      else if (a === 'add-blocker') await editBlocker(null);
+      else if (a === 'add-deliverable') await editDeliverable(null);
+      else if (a === 'add-participant') await editParticipant(null, null);
+      else if (a === 'compose') { showTab('broadcast'); setTimeout(() => { const f = $('#cmpSummary'); if (f) f.focus(); }, 60); }
+    });
+  }
+
   function engagementNudge() {
     state.clicks++;
     if (state.clicks >= 6 && !state.nudged && state.deferredInstall) {
@@ -1058,7 +1189,21 @@
     document.addEventListener('click', engagementNudge);
     $$('.persona .seg').forEach((b) => b.addEventListener('click', () => setPersona(b.dataset.persona)));
     $('#projectSelect').addEventListener('change', (e) => selectProject(e.target.value));
-    $('#themeBtn').addEventListener('click', () => applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'));
+    $('#themeBtn').addEventListener('click', () => {
+      const order = ['auto', 'light', 'dark'];
+      const cur = document.documentElement.dataset.themePref || 'auto';
+      applyTheme(order[(order.indexOf(cur) + 1) % order.length]);
+    });
+    try {
+      window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (lsGet('ss_theme', 'auto') === 'auto') applyTheme('auto'); });
+    } catch (e) { /* older browsers */ }
+    $('#badgePill').addEventListener('click', () => showTab('blockers'));
+    $('#modeSwitchBtn').addEventListener('click', () => setPersona('engineer'));
+    $('#modeDismissBtn').addEventListener('click', () => { $('#modeBar').hidden = true; });
+    const guide = $('#guide');
+    guide.open = lsGet('ss_guide', 'open') !== 'closed';
+    guide.addEventListener('toggle', () => lsSet('ss_guide', guide.open ? 'open' : 'closed'));
+    document.addEventListener('click', onEmptyAction);
 
     const tabs = $$('.tabs [role="tab"]');
     tabs.forEach((t) => {
@@ -1087,7 +1232,7 @@
       if (e.target.type !== 'range') return;
       const li = e.target.closest('.stage');
       li.querySelector('.val').textContent = e.target.value + '%';
-      li.querySelector('.bar span').style.width = e.target.value + '%';
+      e.target.style.setProperty('--progress', e.target.value + '%');
     });
     pipe.addEventListener('change', (e) => { if (e.target.type === 'range') safe(() => onStageChange(+e.target.closest('.stage').dataset.i, +e.target.value)); });
     pipe.addEventListener('click', (e) => {
@@ -1111,7 +1256,11 @@
     $('#histMore').addEventListener('click', () => safe(() => renderHistory(false)));
     $('#historyList').addEventListener('change', (e) => {
       if (!e.target.classList.contains('ack')) return;
-      safe(() => toggleAck(e.target.closest('li').dataset.id, e.target.dataset.pid, e.target.checked));
+      const li = e.target.closest('li');
+      const boxes = $$('.ack', li);
+      const counter = li.querySelector('.so-count');
+      if (counter) counter.textContent = '(' + boxes.filter((c) => c.checked).length + '/' + boxes.length + ' Confirmed)';
+      safe(() => toggleAck(li.dataset.id, e.target.dataset.pid, e.target.checked));
     });
     $('#historyList').addEventListener('click', (e) => {
       const b = e.target.closest('button[data-act]'); if (!b) return;
@@ -1149,7 +1298,11 @@
     $('#delCategory').addEventListener('change', () => safe(renderDeliverables));
     $('#delStatus').addEventListener('change', () => safe(renderDeliverables));
     const dl = $('#deliverableList');
-    dl.addEventListener('input', (e) => { if (e.target.classList.contains('d-prog')) e.target.closest('.del-row').querySelector('.d-val').textContent = e.target.value + '%'; });
+    dl.addEventListener('input', (e) => {
+      if (!e.target.classList.contains('d-prog')) return;
+      e.target.closest('.del-row').querySelector('.d-val').textContent = e.target.value + '%';
+      e.target.style.setProperty('--progress', e.target.value + '%');
+    });
     dl.addEventListener('change', (e) => {
       const row = e.target.closest('.del-row'); if (!row) return;
       const id = row.dataset.id;
@@ -1222,13 +1375,14 @@
     });
 
     // network
-    const net = () => {
+    const net = (say) => {
       const on = navigator.onLine;
       $('#netPill').textContent = on ? 'Online' : 'Offline';
       $('#netPill').className = 'pill ' + (on ? 'ok' : 'bad');
+      if (say) announce(on ? 'Back online.' : 'You are offline. Changes are saved on this device.');
     };
-    window.addEventListener('online', () => { net(); safe(async () => { const n = await flushQueued(); if (n) { toast(n + ' queued broadcast(s) dispatched'); await renderComm(true); } }); if (activeTab() === 'vault') renderPwaBoard(); });
-    window.addEventListener('offline', () => { net(); if (activeTab() === 'vault') renderPwaBoard(); });
+    window.addEventListener('online', () => { net(true); safe(async () => { const n = await flushQueued(); if (n) { toast(n + ' queued broadcast(s) dispatched'); await renderComm(true); } }); if (activeTab() === 'vault') renderPwaBoard(); });
+    window.addEventListener('offline', () => { net(true); if (activeTab() === 'vault') renderPwaBoard(); });
     net();
 
     const clock = () => { $('#tbClock').textContent = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }) + ' GST'; };
@@ -1243,7 +1397,8 @@
 
   /* ---------------- boot ---------------- */
   async function init() {
-    applyTheme(lsGet('ss_theme', 'dark'));
+    setLoading(true);
+    applyTheme(lsGet('ss_theme', 'auto'));
     renderRoleChips();
     bind();
     registerSW();
@@ -1251,6 +1406,7 @@
     await safe(async () => {
       await SSDB.open();
       const seeded = await SSDB.seedIfEmpty();
+      const upgraded = seeded ? false : await SSDB.upgradeSeedV2();
       SSDB.requestPersistence();
       await loadProjects();
       state.projectId = lsGet('ss_project', '');
@@ -1258,6 +1414,7 @@
       populateProjectSelect();
       await selectProject(state.projectId);
       if (seeded) toast('Loaded 3 sample Dubai projects — edit or replace them with your own.', { ms: 7000 });
+      else if (upgraded) toast('Sample projects updated with every role and blocker column. Nothing was deleted.', { ms: 7000 });
       await processUrlActions();
     }, 'Startup');
   }

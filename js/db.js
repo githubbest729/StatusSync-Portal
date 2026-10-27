@@ -458,6 +458,57 @@
   }
   function daysAhead(n) { return daysAgo(-n, 8).slice(0, 10); }
 
+  const PROJECT_CTX = {
+    prj_dewa: { short: 'DEWA', galaxy: 'AlQuoz_Galaxy', drv: 'IEC 61850 / OPC UA', site: 'Al Quoz substation' },
+    prj_hills: { short: 'Empower', galaxy: 'DHills_Cooling_Galaxy', drv: 'Modbus TCP register map rev C', site: 'Dubai Hills Plant 3' },
+    prj_jawtp: { short: 'Jafza Utilities', galaxy: 'JAWTP_InTouch_App', drv: 'OPC UA / Profinet', site: 'Jebel Ali treatment plant' }
+  };
+
+  const MSG = {
+    'Email Transmittal': [
+      ['Transmittal: {galaxy} HMI screen set rev B', 'HMI graphic screens (P&ID overviews, alarm banners, faceplates) enclosed for {short} review. Comments requested within 5 working days.'],
+      ['Transmittal: tag list with {drv} addressing', 'Updated tag list with scaling and alarm limits attached. Revision changes are clouded; sign-off needed before FAT.'],
+      ['Transmittal: SQL Historian shift report templates', 'Shift and daily production report templates (SQL Server / Historian) submitted for approval.'],
+      ['Transmittal: FAT procedure and I/O loop-check sheets', 'FAT procedure with witness checklist enclosed. Please confirm the proposed witness window for {site}.']
+    ],
+    'WhatsApp Update': [
+      ['Panel room update', 'PLC rack powered and all comms LEDs healthy. Starting I/O loop checks on the next 120 points now.'],
+      ['Wonderware galaxy backup verified', '{galaxy} backup restored on the staging node and checksum matched. Safe to proceed with the template change.'],
+      ['Site access confirmation', 'PTW and gate pass for tomorrow are confirmed. Team arrives 07:30, toolbox talk first.'],
+      ['Link status', 'OPC / Modbus links stable for 48 h with no dropouts. Will share the diagnostics export in the weekly report.']
+    ],
+    'MOM': [
+      ['MOM: weekly progress meeting', 'Agreed: HMI rev B comments close Thursday; FAT witness date to be confirmed by {short}. Action on SCADA team to reissue the alarm matrix.'],
+      ['MOM: FAT witness schedule', 'FAT proposed over two days at the assembly workshop. {short} to nominate witnesses; consultant to attend day 2.'],
+      ['MOM: HSE and permit review', 'Annexure-SCT-HR-001 PTW clearance reviewed for panel energisation. LOTO sequence approved; no open HSE actions.'],
+      ['MOM: interface coordination with PLC vendor', 'Register map ownership clarified. Vendor to issue final map; SCADA team to freeze driver config afterwards.']
+    ],
+    'RFI': [
+      ['RFI: alarm priority rationalisation', 'Please confirm priorities for the 14 process alarms flagged in the alarm matrix (ISA-18.2 classification) before HMI rev C.'],
+      ['RFI: historian retention for {galaxy}', 'Confirm required retention (raw 13 months, aggregated 5 years) so SQL storage can be sized correctly.'],
+      ['RFI: network addressing for SCADA servers', 'Need confirmed IP range and VLAN for redundant SCADA servers and the historian node at {site}.'],
+      ['RFI: operator role matrix', 'Please confirm operator, supervisor and engineer security levels for InTouch / System Platform.']
+    ],
+    'Technical Clarification': [
+      ['Clarification: {drv} item naming', 'Item names will follow the agreed area/equipment/signal convention. Existing legacy tags remain mapped in a lookup table.'],
+      ['Clarification: scan rates and deadband', 'Analogue points polled at 1 s, digital at 500 ms, with 0.5% deadband on historised values unless otherwise instructed.'],
+      ['Clarification: redundancy failover test', 'Failover will be tested by pulling the primary server network leg during FAT; target switchover under 10 s.'],
+      ['Clarification: report time zone', 'All historian timestamps are stored in UTC and displayed in GST (UTC+4) on reports.']
+    ],
+    'Portal Broadcast': [
+      ['Weekly status broadcast issued', 'Weekly project status issued to all participants. Telemetry, blockers and QHSE status included.'],
+      ['Milestone broadcast: HMI screens complete', 'All HMI graphic screens completed and uploaded for client review.'],
+      ['Status broadcast: comms health', 'All OPC / Modbus links healthy; remaining links scheduled after panel delivery.'],
+      ['Urgent broadcast: blocker escalated', 'A critical path blocker has been escalated to the Project Manager. Mitigation plan attached.']
+    ]
+  };
+  function pickMsg(p, channel, idx) {
+    const pool = MSG[channel] || MSG['Portal Broadcast'];
+    const m = pool[Math.abs(idx) % pool.length];
+    const fill = (t) => t.replace(/\{(\w+)\}/g, (x, k) => (p.ctx && p.ctx[k]) || '');
+    return { subject: fill(m[0]), body: fill(m[1]) };
+  }
+
   function seedProjects() {
     return [
       {
@@ -486,6 +537,7 @@
       }
     ].map((p) => {
       p.overallProgress = Math.round(p.stages.reduce((a, b) => a + b, 0) / p.stages.length);
+      p.ctx = PROJECT_CTX[p.id];
       return p;
     });
   }
@@ -518,6 +570,13 @@
     add('prj_jawtp', 'Kevin Dsouza', 'Al Gurg Automation and Controls', 'PLC Engineer', 'R', 'k.dsouza@alguirg.example', '+971 55 300 6612', 'WhatsApp Update', 3);
     add('prj_jawtp', 'Fatima Zayed', 'Al Gurg Automation and Controls', 'Procurement', 'C', 'f.zayed@alguirg.example', '+971 55 300 6613', 'Email Transmittal', 7);
     add('prj_jawtp', 'Rob Jensen', 'Al Gurg Automation and Controls', 'HSE Officer', 'I', 'r.jensen@alguirg.example', '+971 55 300 6614', 'Email Transmittal', 18);
+    add('prj_dewa', 'Ibrahim Saleh', 'Al Gurg Automation and Controls', 'SCADA Engineer', 'R', 'i.saleh@algurg.example', '+971 55 300 4416', 'WhatsApp Update', 1);
+    add('prj_hills', 'Aarav Mehta', 'Al Gurg Automation and Controls', 'SCADA Engineer', 'R', 'a.mehta@algurg.example', '+971 55 300 5514', 'WhatsApp Update', 1);
+    add('prj_hills', 'Cathy Lim', 'Al Gurg Automation and Controls', 'Estimation', 'I', 'c.lim@algurg.example', '+971 55 300 5515', 'Email Transmittal', 17);
+    add('prj_hills', 'Mohammed Idris', 'Al Gurg Automation and Controls', 'HSE Officer', 'I', 'm.idris@algurg.example', '+971 55 300 5516', 'Email Transmittal', 10);
+    add('prj_jawtp', 'Nadia Karim', 'Al Gurg Automation and Controls', 'Estimation', 'I', 'n.karim@algurg.example', '+971 55 300 6615', 'Email Transmittal', 22);
+    add('prj_jawtp', 'Tomas Berg', 'Gulf Review Consultants', 'Consultant', 'C', 't.berg@gulfreview.example', '+971 4 555 9900', 'Email Transmittal', 9);
+    add('prj_jawtp', 'Zainab Qureshi', 'Al Gurg Automation and Controls', 'SCADA Engineer', 'R', 'z.qureshi@algurg.example', '+971 55 300 6616', 'WhatsApp Update', 2);
     return rows;
   }
 
@@ -572,7 +631,13 @@
       b('prj_jawtp', 'Critical', 'Legacy InTouch tag database export corrupt — migration of 3,100 tags blocked', 'InTouch Migration', 'Omar Haddad', 11, 3, 'Escalated to PM', 112, 42000, 'Vendor support case open; fallback manual rebuild plan costed.'),
       b('prj_jawtp', 'High', 'Profinet switch delivery slipped by 3 weeks', 'Procurement', 'Fatima Zayed', 16, 10, 'Open', 40, 12400, 'Alternative supplier quote requested.'),
       b('prj_jawtp', 'Medium', 'SQL Server licence not provisioned on historian VM', 'SQL/Historian', 'Kevin Dsouza', 7, 6, 'Open', 16, 3200, ''),
-      b('prj_jawtp', 'Low', 'HMI colour standard clarification', 'HMI', 'SCADA Engineer', 25, -5, 'Resolved', 6, 900, 'Client confirmed ISA-101 greyscale scheme.')
+      b('prj_jawtp', 'Low', 'HMI colour standard clarification', 'HMI', 'SCADA Engineer', 25, -5, 'Resolved', 6, 900, 'Client confirmed ISA-101 greyscale scheme.'),
+      b('prj_dewa', 'Medium', 'OPC UA certificate trust chain mismatch on historian gateway', 'OPC UA', 'Vikram Shetty', 40, -20, 'Resolved', 18, 5400, 'Certificates reissued via DEWA PKI; connection stable for 72 h.'),
+      b('prj_dewa', 'Medium', 'ArchestrA galaxy backup restore failed on staging node', 'Wonderware', 'Ibrahim Saleh', 28, -12, 'Resolved', 12, 3600, 'Restored from earlier backup and verified checksum; backup job rescheduled.'),
+      b('prj_hills', 'High', 'Client VLAN change freeze blocks SCADA server deployment', 'Network', 'Priya Nair', 8, 6, 'Escalated to PM', 28, 7600, 'Escalated to PM for client IT exception; interim deployment on isolated switch.'),
+      b('prj_hills', 'Low', 'FAT witness date clash with client shutdown', 'FAT/SAT', 'Priya Nair', 30, -14, 'Resolved', 6, 1200, 'FAT moved one week; witness list reconfirmed by Empower.'),
+      b('prj_hills', 'Medium', 'Historian tag-count licence shortfall', 'SQL/Historian', 'Lina Haddad', 35, -18, 'Resolved', 14, 4200, 'Licence uplift purchased and applied; tag import completed.'),
+      b('prj_jawtp', 'High', 'PTW clearance delayed for Pump House 2 panel work', 'HSE', 'Rob Jensen', 33, -15, 'Resolved', 22, 6800, 'Annexure-SCT-HR-001 PTW issued after HSE walkdown and LOTO review.')
     ];
   }
 
@@ -616,11 +681,11 @@
         for (let k = 0; k < 2; k++, n++) {
           const ch = channels[(w + k + pi) % channels.length];
           const who = pp[(w + k) % pp.length];
+          const msg = pickMsg(p, ch, w + k + pi);
           logs.push({
             id: uid('log'), projectId: p.id, participantId: who.id, channel: ch,
-            subject: subjects[ch] + ' (' + p.projectCode + ')',
-            body: ch === 'MOM' ? 'Attendees: client and Al Gurg A&C team. Actions: confirm FAT window, close open alarm comments.'
-              : 'Communication with ' + who.name + ' regarding ' + p.name + '.',
+            subject: msg.subject,
+            body: msg.body,
             direction: k % 2 ? 'Inbound' : 'Outbound', attachmentsMeta: [],
             timestamp: daysAgo(age - k - 0.0 + (k ? 1 : 0), 7 + k), syncState: 'synced'
           });
@@ -645,6 +710,40 @@
     await putMany('status_broadcasts', bl.broadcasts);
     await putMany('communication_log', bl.logs);
     await setMeta('seeded', true);
+    await setMeta('seedVersion', 2);
+    return true;
+  }
+
+  /* Adds the v2 seed additions (all roles, all blocker columns) to browsers seeded by v1. Never deletes data. */
+  async function upgradeSeedV2() {
+    if ((await getMeta('seedVersion', 1)) >= 2) return false;
+    const projects = await getAll('projects');
+    const ids = projects.map((p) => p.id);
+    const seedIds = ['prj_dewa', 'prj_hills', 'prj_jawtp'];
+    const parts = await getAll('participants');
+    const blks = await getAll('blockers_issues');
+    const newParts = seedParticipants().filter((x) => ids.indexOf(x.projectId) !== -1 &&
+      seedIds.indexOf(x.projectId) !== -1 && !parts.some((q) => q.projectId === x.projectId && q.role === x.role));
+    const newBlk = seedBlockers().filter((x) => ids.indexOf(x.projectId) !== -1 && seedIds.indexOf(x.projectId) !== -1 &&
+      !blks.some((q) => q.projectId === x.projectId && q.title === x.title));
+    // only add a blocker if its column is currently empty for that project
+    const addBlk = newBlk.filter((x) => !blks.some((q) => q.projectId === x.projectId && q.status === x.status));
+    const seenCol = {};
+    const finalBlk = addBlk.filter((x) => { const k = x.projectId + '|' + x.status; if (seenCol[k] && x.status !== 'Resolved') return false; seenCol[k] = (seenCol[k] || 0) + 1; return seenCol[k] <= 2; });
+    // seed comm log entries get the new varied text where they still carry the old generic body
+    const logs = await getAll('communication_log');
+    const byId = {}; projects.forEach((p) => { byId[p.id] = p; });
+    const fixed = [];
+    logs.forEach((l, i) => {
+      if (/^Communication with .* regarding /.test(l.body || '') || /^Attendees: client and Al Gurg A&C team/.test(l.body || '')) {
+        const p = byId[l.projectId];
+        if (p) { const ctx = PROJECT_CTX[p.id]; if (ctx) { p.ctx = ctx; const m = pickMsg(p, l.channel, i); fixed.push(Object.assign({}, l, { subject: m.subject, body: m.body })); } }
+      }
+    });
+    if (newParts.length) await putMany('participants', newParts);
+    if (finalBlk.length) await putMany('blockers_issues', finalBlk);
+    if (fixed.length) await putMany('communication_log', fixed);
+    await setMeta('seedVersion', 2);
     return true;
   }
 
@@ -655,6 +754,6 @@
     pageByProject, countByProject, getMeta, setMeta,
     requestPersistence, storageTelemetry, OPFS,
     compress, decompress, compactArchives, searchArchives, loadArchivedRecord, restoreQuarter,
-    exportSnapshot, importSnapshot, seedIfEmpty
+    exportSnapshot, importSnapshot, seedIfEmpty, upgradeSeedV2
   };
 })(typeof self !== 'undefined' ? self : window);
