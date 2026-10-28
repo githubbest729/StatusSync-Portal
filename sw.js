@@ -1,9 +1,15 @@
 /* StatusSync Portal — Service Worker */
 'use strict';
 
-const CACHE_NAME = 'STATUSSYNC_CACHE_v2026.2';
-const RUNTIME_CACHE = 'STATUSSYNC_RUNTIME_v2026.2';
+const CACHE_NAME = 'STATUSSYNC_CACHE_v2026.4';
+const RUNTIME_CACHE = 'STATUSSYNC_RUNTIME_v2026.4';
 const OFFLINE_URL = './offline.html';
+
+/* Core files are Network-First (cache only as the offline fallback) so a new GitHub Pages deploy shows immediately. */
+const NETWORK_FIRST_PATHS = ['/index.html', '/css/styles.css', '/js/app.js', '/js/db.js', '/js/reports.js'];
+function isNetworkFirst(url) {
+  return NETWORK_FIRST_PATHS.some((p) => url.pathname.endsWith(p));
+}
 
 const APP_SHELL = [
   './',
@@ -25,6 +31,7 @@ const APP_SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting(); // activate the new worker immediately instead of waiting for old tabs to close
   // Static Routing API: serve static assets straight from the network when online,
   // bypassing worker startup. Offline fetches still reach the fetch handler below.
   try {
@@ -123,6 +130,24 @@ self.addEventListener('fetch', (event) => {
         const shell = await caches.match('./index.html');
         if (shell) return shell;
         return (await caches.match(OFFLINE_URL)) || Response.error();
+      }
+    })());
+    return;
+  }
+
+  // Network-First (fallback to cache) for the core app files.
+  if (isNetworkFirst(url)) {
+    event.respondWith((async () => {
+      try {
+        const net = await fetch(new Request(req, { cache: 'no-cache' }));
+        if (net && net.ok) {
+          const cache = await caches.open(CACHE_NAME);
+          cache.put(req, net.clone()).catch(() => null);
+        }
+        return net;
+      } catch (err) {
+        const cached = (await caches.match(req, { ignoreSearch: true })) || (await caches.match(url.pathname));
+        return cached || new Response('', { status: 504, statusText: 'Offline' });
       }
     })());
     return;

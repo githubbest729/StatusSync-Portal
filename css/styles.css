@@ -306,7 +306,11 @@ input[type="range"].track:focus-visible { outline-offset: 0; border-radius: 8px;
 
 /* Blocker card actions: compact, evenly stretched; wrap into even rows only when the card is narrow */
 .bactions { flex-wrap: wrap; gap: 6px; }
-.bactions .btn { flex: 1 1 auto; padding: 6px 8px; font-size: .8rem; }
+.bactions .btn { flex: 1 1 auto; padding: 6px 8px; font-size: .8rem; white-space: nowrap; }
+/* Edit / Delete: compact icon buttons (44px touch target) so all 5 actions stay on one row at 1280–1366px */
+.bactions { flex-wrap: nowrap; }
+.bactions .btn.icon { flex: 0 0 44px; min-width: 44px; padding: 6px 0; font-size: 1rem; line-height: 1; text-align: center; }
+@media (max-width: 520px) { .bactions { flex-wrap: wrap; } }
 
 /* Storage vault: wider telemetry card, values never wrap, denser diagnostics board */
 .stats dd { white-space: nowrap; overflow-wrap: normal; }

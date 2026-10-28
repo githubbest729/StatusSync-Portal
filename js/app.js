@@ -798,7 +798,7 @@
       (ro ? '' : '<div class="row-actions bactions">' +
         (b.status === 'Open' ? '<button type="button" class="btn small primary" data-act="escalate" title="Escalate to PM" aria-label="Escalate to PM">Escalate →</button>' : '') +
         (b.status !== 'Resolved' ? '<button type="button" class="btn small" data-act="resolve" title="Mark resolved" aria-label="Mark resolved">Resolve ✓</button>' : '<button type="button" class="btn small" data-act="reopen">Reopen</button>') +
-        '<button type="button" class="btn small" data-act="note" title="Log mitigation" aria-label="Log mitigation">Mitigation</button><button type="button" class="btn small" data-act="edit">Edit</button><button type="button" class="btn small danger" data-act="del">Delete</button></div>') + '</div>';
+        '<button type="button" class="btn small" data-act="note" title="Log mitigation" aria-label="Log mitigation">Mitigation</button><button type="button" class="btn small icon" data-act="edit" title="Edit blocker" aria-label="Edit blocker">✎</button><button type="button" class="btn small icon danger" data-act="del" title="Delete blocker" aria-label="Delete blocker">🗑</button></div>') + '</div>';
     $('#blockerBoard').innerHTML = cols.map((st) => {
       const items = all.filter((b) => b.status === st).sort((a, b) => sevOrder[a.severity] - sevOrder[b.severity]);
       return '<div class="col" data-status="' + st + '"><h2>' + st + ' <span class="badge">' + items.length + '</span></h2>' + (items.map(card).join('') || emptyState(emptyCol[st])) + '</div>';
@@ -932,6 +932,16 @@
     await selectProject(state.projectId);
     $('#backupMsg').textContent = 'Imported ' + n.toLocaleString('en-US') + ' records' + (replace ? ' (replaced existing data)' : ' (merged)') + '.';
     toast('Snapshot imported');
+  }
+  async function resetDemoData() {
+    if (!window.confirm('Reset the 3 sample Dubai projects (DEWA, Empower, Jafza) to their original demo data?\n\nAny edits you made to those three projects will be lost. Projects you created yourself are not touched.')) return;
+    await SSDB.reseedSample();
+    await loadProjects();
+    if (!state.projects.find((p) => p.id === state.projectId)) state.projectId = state.projects[0] && state.projects[0].id;
+    populateProjectSelect();
+    await selectProject(state.projectId);
+    $('#backupMsg').textContent = 'Demo data reset to seed version ' + SSDB.SEED_SCHEMA_VERSION + '.';
+    toast('Demo data reset');
   }
   async function pickAndImport() {
     const replace = $('#importReplace').checked;
@@ -1378,6 +1388,7 @@
     });
     $('#exportBtn').addEventListener('click', () => safe(exportSnapshot, 'Export'));
     $('#importBtn').addEventListener('click', () => safe(pickAndImport));
+    $('#reseedBtn').addEventListener('click', () => safe(resetDemoData, 'Reset demo data'));
     $('#importInput').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) safe(() => importSnapshotFile(f, $('#importReplace').checked), 'Import'); });
     $('#pwaBoard').addEventListener('click', (e) => {
       if (e.target.id === 'notifyBtn') safe(enableNotifications);
@@ -1416,7 +1427,8 @@
     await safe(async () => {
       await SSDB.open();
       const seeded = await SSDB.seedIfEmpty();
-      const upgraded = seeded ? false : await SSDB.upgradeSeedV2();
+      const refreshed = seeded ? false : await SSDB.ensureSeedVersion();
+      const upgraded = (seeded || refreshed) ? false : await SSDB.upgradeSeedV2();
       SSDB.requestPersistence();
       await loadProjects();
       state.projectId = lsGet('ss_project', '');
@@ -1424,6 +1436,7 @@
       populateProjectSelect();
       await selectProject(state.projectId);
       if (seeded) toast('Loaded 3 sample Dubai projects — edit or replace them with your own.', { ms: 7000 });
+      else if (refreshed) toast('Demo projects refreshed to seed version ' + SSDB.SEED_SCHEMA_VERSION + '. Your own projects were not touched.', { ms: 7000 });
       else if (upgraded) toast('Sample projects updated with every role and blocker column. Nothing was deleted.', { ms: 7000 });
       await processUrlActions();
     }, 'Startup');

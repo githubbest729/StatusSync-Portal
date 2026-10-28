@@ -441,6 +441,7 @@
       total += await putMany(s, rows);
     }
     await setMeta('seeded', true);
+    await setMeta('customImport', true); // user brought their own data: never auto re-seed over it
     return total;
   }
 
@@ -711,7 +712,80 @@
     await putMany('communication_log', bl.logs);
     await setMeta('seeded', true);
     await setMeta('seedVersion', 2);
+    await stampSeedSchema();
     return true;
+  }
+
+  /* ---------------- Seed schema version (auto re-seed of the 3 demo projects) ---------------- */
+  const SEED_SCHEMA_VERSION = '2026.4';
+  const SEED_SCHEMA_KEY = 'ss_seed_schema_version';
+  const SAMPLE_IDS = ['prj_dewa', 'prj_hills', 'prj_jawtp'];
+
+  function verCmp(a, b) {
+    const x = String(a || '0').split('.').map(Number), y = String(b || '0').split('.').map(Number);
+    for (let i = 0; i < Math.max(x.length, y.length); i++) {
+      const d = (x[i] || 0) - (y[i] || 0);
+      if (d) return d < 0 ? -1 : 1;
+    }
+    return 0;
+  }
+  async function readSeedSchema() {
+    try { const v = localStorage.getItem(SEED_SCHEMA_KEY); if (v) return v; } catch (e) { /* storage blocked */ }
+    return (await getMeta('seedSchemaVersion', '')) || '';
+  }
+  async function stampSeedSchema() {
+    try { localStorage.setItem(SEED_SCHEMA_KEY, SEED_SCHEMA_VERSION); } catch (e) { /* storage blocked */ }
+    await setMeta('seedSchemaVersion', SEED_SCHEMA_VERSION);
+  }
+
+  /* Removes every record belonging to one project (cursor delete, keyPath-agnostic). */
+  async function deleteProjectData(pid) {
+    const db = await open();
+    const parts = [
+      ['participants', 'projectId', IDBKeyRange.only(pid)],
+      ['attachments', 'projectId', IDBKeyRange.only(pid)],
+      ['status_broadcasts', 'projectId_timestamp', IDBKeyRange.bound([pid, ''], [pid, '￿'])],
+      ['communication_log', 'projectId_timestamp', IDBKeyRange.bound([pid, ''], [pid, '￿'])],
+      ['deliverables_milestones', 'projectId_category', IDBKeyRange.bound([pid, ''], [pid, '￿'])],
+      ['blockers_issues', 'projectId_status', IDBKeyRange.bound([pid, ''], [pid, '￿'])]
+    ];
+    const tx = db.transaction(parts.map((p) => p[0]).concat('projects'), 'readwrite');
+    parts.forEach(([store, index, range]) => {
+      const req = tx.objectStore(store).index(index).openCursor(range);
+      req.onsuccess = () => { const c = req.result; if (c) { c.delete(); c.continue(); } };
+    });
+    tx.objectStore('projects').delete(pid);
+    await txDone(tx);
+  }
+
+  /* Re-creates ONLY the 3 sample Dubai projects. User-created projects are never touched. */
+  async function reseedSample() {
+    for (const pid of SAMPLE_IDS) await deleteProjectData(pid);
+    const projects = seedProjects();
+    const participants = seedParticipants();
+    const deliverables = seedDeliverables(projects);
+    const blockers = seedBlockers();
+    const bl = seedBroadcastsAndLogs(projects, participants);
+    await putMany('projects', projects);
+    await putMany('participants', participants);
+    await putMany('deliverables_milestones', deliverables);
+    await putMany('blockers_issues', blockers);
+    await putMany('status_broadcasts', bl.broadcasts);
+    await putMany('communication_log', bl.logs);
+    await setMeta('seeded', true);
+    await setMeta('seedVersion', 2);
+    await stampSeedSchema();
+    return true;
+  }
+
+  /* On startup: if the stored seed version is missing/older (and no custom snapshot was imported), refresh the demo data. */
+  async function ensureSeedVersion() {
+    const stored = await readSeedSchema();
+    if (stored && verCmp(stored, SEED_SCHEMA_VERSION) >= 0) return false;
+    if (await getMeta('customImport', false)) { await stampSeedSchema(); return false; }
+    const have = await getAll('projects');
+    if (!have.some((p) => SAMPLE_IDS.indexOf(p.id) !== -1)) { await stampSeedSchema(); return false; }
+    return reseedSample();
   }
 
   /* Adds the v2 seed additions (all roles, all blocker columns) to browsers seeded by v1. Never deletes data. */
@@ -754,6 +828,7 @@
     pageByProject, countByProject, getMeta, setMeta,
     requestPersistence, storageTelemetry, OPFS,
     compress, decompress, compactArchives, searchArchives, loadArchivedRecord, restoreQuarter,
-    exportSnapshot, importSnapshot, seedIfEmpty, upgradeSeedV2
+    exportSnapshot, importSnapshot, seedIfEmpty, upgradeSeedV2,
+    SEED_SCHEMA_VERSION, ensureSeedVersion, reseedSample
   };
 })(typeof self !== 'undefined' ? self : window);
