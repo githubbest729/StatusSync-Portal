@@ -141,15 +141,15 @@
           <legend>Send to (by role)</legend>
           <div id="cmpRoles"></div>
         </fieldset>
-        <label>Executive summary<textarea id="cmpSummary" rows="3" required></textarea></label>
-        <div class="grid-2">
-          <label>Wonderware SCADA / HMI progress<textarea id="cmpScada" rows="3"></textarea></label>
-          <label>PLC &amp; OPC/Modbus communication status<textarea id="cmpPlc" rows="3"></textarea></label>
-          <label>SQL database &amp; Historian status<textarea id="cmpSql" rows="3"></textarea></label>
-          <label>Site survey / BOM / procurement<textarea id="cmpBom" rows="3"></textarea></label>
+        <label>Executive summary<textarea id="cmpSummary" rows="2" required></textarea></label>
+        <div class="grid-compose">
+          <label>Wonderware SCADA / HMI progress<textarea id="cmpScada" rows="2"></textarea></label>
+          <label>PLC &amp; OPC/Modbus communication status<textarea id="cmpPlc" rows="2"></textarea></label>
+          <label>SQL database &amp; Historian status<textarea id="cmpSql" rows="2"></textarea></label>
+          <label>Site survey / BOM / procurement<textarea id="cmpBom" rows="2"></textarea></label>
+          <label class="span-2">QA &amp; QHSE notes (Annexure-SCT-HR-001)<textarea id="cmpQa" rows="2"></textarea></label>
         </div>
-        <label>QA &amp; QHSE notes (Annexure-SCT-HR-001)<textarea id="cmpQa" rows="2"></textarea></label>
-        <div class="row-actions wrap">
+        <div class="row-actions wrap composer-actions">
           <button type="button" class="btn" id="autoFillBtn">Auto-fill engineering telemetry</button>
           <button type="submit" class="btn primary" id="saveBroadcastBtn">Save to portal feed</button>
           <button type="button" class="btn" id="copyWaBtn">Copy WhatsApp / Teams brief</button>
@@ -240,7 +240,7 @@
   <!-- TAB 6 -->
   <section id="panel-vault" role="tabpanel" aria-labelledby="tab-vault" hidden class="engineer-only">
     <div class="section-head"><h1>3-Year Storage Vault, OPFS Files &amp; PWA Diagnostics</h1></div>
-    <div class="grid-2">
+    <div class="grid-2 vault-grid">
       <div class="card">
         <h2>Storage telemetry &amp; 3-year capacity</h2>
         <div class="gauge" role="img" aria-label="Storage quota used"><div class="gauge-fill" id="gaugeFill"></div></div>

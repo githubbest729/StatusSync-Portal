@@ -236,7 +236,7 @@
     try { open = (await SSDB.getAll('blockers_issues')).filter((b) => b.status !== 'Resolved'); } catch (e) { open = []; }
     const mine = open.filter((b) => b.projectId === state.projectId).length;
     const pill = $('#badgePill');
-    pill.innerHTML = mine + ' Open (' + open.length + '<span class="pf">&nbsp;Portfolio</span>)';
+    pill.innerHTML = mine + ' open (' + open.length + '<span class="pf">&nbsp;total</span>)';
     pill.className = 'pill' + (mine ? ' warn' : ' ok');
     pill.setAttribute('aria-label', mine + ' open blockers on this project, ' + open.length + ' across the portfolio. Open the Blockers board.');
     try {
@@ -607,19 +607,25 @@
     const roleSel = $('#raciRole');
     if (roleSel.options.length <= 1) roleSel.innerHTML = '<option value="">All roles</option>' + ALL_ROLES.map((r) => '<option>' + esc(r) + '</option>').join('');
     const rf = $('#raciFilter').value, ro = roleSel.value;
-    const page = await SSDB.pageByProject('status_broadcasts', p.id, { limit: 80 });
+    const [page, logPage] = await Promise.all([
+      SSDB.pageByProject('status_broadcasts', p.id, { limit: 80 }),
+      SSDB.pageByProject('communication_log', p.id, { limit: 300 })
+    ]);
     const lastByRole = {};
     page.items.forEach((b) => (b.sentToRoles || []).forEach((r) => { if (!lastByRole[r]) lastByRole[r] = b.timestamp; }));
+    const lastByPerson = {};
+    logPage.items.forEach((e) => { if (e.participantId && !lastByPerson[e.participantId]) lastByPerson[e.participantId] = e.timestamp; });
     const rows = state.participants.filter((x) => (!rf || x.raci === rf) && (!ro || x.role === ro));
     $('#raciTable tbody').innerHTML = rows.map((x) => {
-      const last = lastByRole[x.role] || null;
+      // most recent touch: broadcast sent to their role, their last contact, or a direct log entry
+      const last = [lastByRole[x.role], x.lastContacted, lastByPerson[x.id]].filter(Boolean).sort().pop() || null;
       const d = last ? daysSince(last) : null;
       const overdue = d === null || d > OVERDUE_DAYS;
       const wa = String(x.whatsapp || x.phone || '').replace(/\D/g, '');
       return '<tr class="' + (overdue ? 'overdue' : '') + '" data-id="' + esc(x.id) + '"><td><b>' + esc(x.name) + '</b><br><a href="mailto:' + esc(x.email) + '">' + esc(x.email) + '</a></td><td>' + esc(x.organization) + '</td><td>' + esc(x.role) + '</td>' +
         '<td><span class="badge" title="' + esc(RACI_NAMES[x.raci] || '') + '">' + esc(x.raci) + '</span></td><td>' + esc(x.preferredChannel) + '</td><td>' + (x.lastContacted ? fmtDate(x.lastContacted) : '—') + '</td>' +
-        '<td>' + (d === null ? 'Never' : d + ' d') + (overdue ? ' · <b>Overdue</b>' : '') + '</td>' +
-        '<td class="engineer-only"><div class="row-actions wrap">' +
+        '<td class="nowrap">' + (d === null ? 'Never' : d + ' d') + (overdue ? ' · <b>Overdue</b>' : '') + '</td>' +
+        '<td class="engineer-only act"><div class="row-actions raci-actions">' +
         '<button type="button" class="btn small" data-act="log">Log comms</button>' +
         (wa ? '<a class="btn small" target="_blank" rel="noopener" href="https://wa.me/' + wa + '">WhatsApp</a>' : '') +
         '<button type="button" class="btn small" data-act="edit">Edit</button><button type="button" class="btn small danger" data-act="del">Remove</button></div></td></tr>';
@@ -789,10 +795,10 @@
       '<div class="meta">Raised ' + fmtDate(b.raisedDate) + ' · Target ' + fmtDate(b.targetResolutionDate) + '</div>' +
       '<div class="meta"><b>' + (+b.impactHours || 0) + ' h</b> · <b>AED ' + (+b.expenditureImpactAED || 0).toLocaleString('en-US') + '</b></div>' +
       (b.resolutionNotes ? '<p style="margin:6px 0 0;font-size:.85rem">' + esc(b.resolutionNotes).replace(/\n/g, '<br>') + '</p>' : '') +
-      (ro ? '' : '<div class="row-actions">' +
-        (b.status === 'Open' ? '<button type="button" class="btn small primary" data-act="escalate">Escalate to PM →</button>' : '') +
-        (b.status !== 'Resolved' ? '<button type="button" class="btn small" data-act="resolve">Mark Resolved ✓</button>' : '<button type="button" class="btn small" data-act="reopen">Reopen</button>') +
-        '<button type="button" class="btn small" data-act="note">Log mitigation</button><button type="button" class="btn small" data-act="edit">Edit</button><button type="button" class="btn small danger" data-act="del">Delete</button></div>') + '</div>';
+      (ro ? '' : '<div class="row-actions bactions">' +
+        (b.status === 'Open' ? '<button type="button" class="btn small primary" data-act="escalate" title="Escalate to PM" aria-label="Escalate to PM">Escalate →</button>' : '') +
+        (b.status !== 'Resolved' ? '<button type="button" class="btn small" data-act="resolve" title="Mark resolved" aria-label="Mark resolved">Resolve ✓</button>' : '<button type="button" class="btn small" data-act="reopen">Reopen</button>') +
+        '<button type="button" class="btn small" data-act="note" title="Log mitigation" aria-label="Log mitigation">Mitigation</button><button type="button" class="btn small" data-act="edit">Edit</button><button type="button" class="btn small danger" data-act="del">Delete</button></div>') + '</div>';
     $('#blockerBoard').innerHTML = cols.map((st) => {
       const items = all.filter((b) => b.status === st).sort((a, b) => sevOrder[a.severity] - sevOrder[b.severity]);
       return '<div class="col" data-status="' + st + '"><h2>' + st + ' <span class="badge">' + items.length + '</span></h2>' + (items.map(card).join('') || emptyState(emptyCol[st])) + '</div>';
@@ -854,7 +860,7 @@
     const pct = Math.min(100, t.usedPercent);
     $('#gaugeFill').style.width = Math.max(1, pct) + '%';
     $('#miniFill').style.width = Math.max(1, pct) + '%';
-    $('#miniText').textContent = fmtBytes(t.usageBytes) + ' of ' + (t.quotaBytes ? fmtBytes(t.quotaBytes) : 'unknown');
+    $('#miniText').textContent = storageLabel(t);
     const years = t.yearsRemaining == null ? 'n/a' : (t.yearsRemaining >= 50 ? '50+ years' : t.yearsRemaining.toFixed(1) + ' years');
     const proj3 = t.threeYearTargetBytes ? fmtBytes(t.threeYearTargetBytes) + (t.quotaBytes ? ' (' + ((t.threeYearTargetBytes / t.quotaBytes) * 100).toFixed(2) + '% of quota)' : '') : 'n/a';
     const attBytes = await SSDB.OPFS.totalBytes();
@@ -871,7 +877,11 @@
     const t = await SSDB.storageTelemetry().catch(() => null);
     if (!t) return;
     $('#miniFill').style.width = Math.max(1, Math.min(100, t.usedPercent)) + '%';
-    $('#miniText').textContent = fmtBytes(t.usageBytes) + ' of ' + (t.quotaBytes ? fmtBytes(t.quotaBytes) : 'unknown') + ' · ' + (t.persisted ? 'Persistent' : 'Best-Effort');
+    $('#miniText').textContent = storageLabel(t);
+  }
+  // single formatter so every tab shows the same header text, e.g. "1.59 MB of 10.00 GB · Persistent"
+  function storageLabel(t) {
+    return fmtBytes(t.usageBytes) + ' of ' + (t.quotaBytes ? fmtBytes(t.quotaBytes) : 'unknown') + ' · ' + (t.persisted ? 'Persistent' : 'Best-Effort');
   }
   async function renderAttachments() {
     const p = curProject(); if (!p) return;
@@ -946,7 +956,7 @@
     const yes = (b) => (b ? 'Supported' : 'Unavailable');
     const tiles = [
       ['Service Worker', swState, swState.indexOf('Active') === 0],
-      ['Static Routing API', staticRoute ? 'Supported' : 'Not in this browser (normal fetch path)', staticRoute],
+      ['Static Routing API', staticRoute ? 'Supported' : 'Not in this browser', staticRoute],
       ['Persistent storage', t.persisted ? 'Granted' : 'Best-Effort', t.persisted],
       ['Badging API', yes('setAppBadge' in navigator), 'setAppBadge' in navigator],
       ['Network', navigator.onLine ? 'Online' : 'Offline', navigator.onLine],

@@ -23,7 +23,7 @@ body {
   margin: 0; background: var(--bg); color: var(--text);
   font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-  min-height: 100vh; overflow-x: hidden;
+  min-height: 100vh; overflow-x: clip;
 }
 h1 { font-size: 1.4rem; margin: 0 0 4px; }
 h2 { font-size: 1.05rem; margin: 0 0 10px; }
@@ -97,7 +97,7 @@ button.pill:hover { border-color: var(--accent); }
 .tabs button:hover { color: var(--text); }
 .tabs button[aria-selected="true"] { background: var(--card); color: var(--text); border-color: var(--line); box-shadow: inset 0 3px 0 var(--accent); }
 
-main { width: min(95vw, 1440px); max-width: 1440px; margin: 0 auto; padding: 16px 0 40px; container-type: inline-size; container-name: main; min-height: 70vh; }
+main { width: min(96vw, 1480px); max-width: 1480px; margin: 0 auto; padding: 16px 0 40px; container-type: inline-size; container-name: main; min-height: 70vh; }
 main:focus { outline: none; }
 .section-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
@@ -285,3 +285,34 @@ input[type="range"].track:focus-visible { outline-offset: 0; border-radius: 8px;
   #tbClock { display: none; }
   #badgePill .pf { display: none; }
 }
+
+/* v2.2 bug-fix pass ------------------------------------------------------ */
+.nowrap { white-space: nowrap; }
+.guide { width: min(96vw, 1480px); }
+
+/* Broadcast composer: balanced 3 + 2 grid, compact textareas, action bar always visible */
+#composerForm label { margin-bottom: 8px; }
+#composerForm textarea { min-height: 68px; }
+.grid-compose { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0 12px; }
+.grid-compose > label { grid-column: span 2; }
+.grid-compose > label:nth-child(n+4) { grid-column: span 3; }   /* Site survey/BOM and QA/QHSE side by side */
+@media (max-width: 900px) { .grid-compose { grid-template-columns: minmax(0, 1fr); } .grid-compose > label, .grid-compose > label:nth-child(n+4) { grid-column: auto; } }
+.composer-actions { position: sticky; bottom: 0; z-index: 5; margin: 0 -16px -4px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--card); border-top: 1px solid var(--line); border-radius: 0 0 14px 14px; }
+
+/* RACI actions stay on one row */
+#raciTable td.act { white-space: nowrap; }
+.raci-actions { flex-wrap: nowrap; gap: 6px; margin-top: 0; }
+.raci-actions .btn { padding: 6px 10px; }
+
+/* Blocker card actions: compact, evenly stretched; wrap into even rows only when the card is narrow */
+.bactions { flex-wrap: wrap; gap: 6px; }
+.bactions .btn { flex: 1 1 auto; padding: 6px 8px; font-size: .8rem; }
+
+/* Storage vault: wider telemetry card, values never wrap, denser diagnostics board */
+.stats dd { white-space: nowrap; overflow-wrap: normal; }
+@media (min-width: 1300px) { .vault-grid { grid-template-columns: minmax(400px, 1.3fr) repeat(3, minmax(0, 1fr)); } }
+.vault-grid .card { margin-bottom: 0; }
+#pwaBoard.tele-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.vault-grid { margin-bottom: 16px; }
+#pwaBoard .tele .row-actions { flex-direction: column; align-items: stretch; }
+#pwaBoard .tele .btn { white-space: normal; text-align: center; }
